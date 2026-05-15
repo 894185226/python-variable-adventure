@@ -121,6 +121,37 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // 欢迎模块
 function initWelcomeModule() {
+    // 搜索功能
+    const searchForm = document.querySelector('.hero-form');
+    const searchInput = document.getElementById('search-input');
+    
+    if (searchForm) {
+        searchForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const searchTerm = searchInput.value.toLowerCase().trim();
+            
+            if (searchTerm) {
+                const modules = document.querySelectorAll('.module');
+                let found = false;
+                
+                modules.forEach(module => {
+                    const moduleId = module.id;
+                    const moduleName = module.querySelector('h2')?.textContent.toLowerCase() || '';
+                    const moduleContent = module.textContent.toLowerCase();
+                    
+                    if (moduleName.includes(searchTerm) || moduleContent.includes(searchTerm)) {
+                        switchModule(moduleId);
+                        found = true;
+                    }
+                });
+                
+                if (!found) {
+                    alert(`未找到与"${searchTerm}"相关的内容`);
+                }
+            }
+        });
+    }
+    
     const startBtn = document.getElementById('start-learning');
     
     if (startBtn) {
@@ -133,6 +164,15 @@ function initWelcomeModule() {
 
 // 导航模块 - W3Schools风格下拉菜单
 function initNavigation() {
+    // Logo链接点击事件 - 返回首页
+    const logoLink = document.querySelector('.logo-link');
+    if (logoLink) {
+        logoLink.addEventListener('click', function(e) {
+            e.preventDefault();
+            switchModule('welcome');
+        });
+    }
+    
     // 下拉菜单功能 - 使用更简单的选择器
     const navButtons = document.querySelectorAll('a[onclick^="openNavItem"]');
     navButtons.forEach(function(btn) {
@@ -174,13 +214,15 @@ function initNavigation() {
         });
     });
     
-    // 导航链接
-    const navLinks = document.querySelectorAll('.nav-link');
+    // 导航链接（包含所有带有 data-module 属性的链接）
+    const navLinks = document.querySelectorAll('.nav-link, [data-module]');
     navLinks.forEach(link => {
         link.addEventListener('click', function(e) {
             e.preventDefault();
             const moduleId = this.dataset.module;
-            switchModule(moduleId);
+            if (moduleId) {
+                switchModule(moduleId);
+            }
             
             // 关闭下拉菜单
             const allNavs = document.querySelectorAll('.w3-dropdown-content');
@@ -198,6 +240,24 @@ function initNavigation() {
             window.scrollTo({ top: 0, behavior: 'smooth' });
         });
     });
+}
+
+// 全局函数 - 打开导航菜单（供HTML onclick调用）
+function openNavItem(navId) {
+    const allNavs = document.querySelectorAll('.w3-dropdown-content');
+    const targetNav = document.getElementById('nav_' + navId);
+    
+    // 隐藏其他菜单
+    allNavs.forEach(function(nav) {
+        if (nav !== targetNav) {
+            nav.classList.add('w3-hide');
+        }
+    });
+    
+    // 切换当前菜单
+    if (targetNav) {
+        targetNav.classList.toggle('w3-hide');
+    }
 }
 
 // 切换下拉菜单
