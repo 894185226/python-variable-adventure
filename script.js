@@ -115,6 +115,8 @@ document.addEventListener('DOMContentLoaded', () => {
     initExtendModule();
     initProjectModule();
     initTestModule();
+    initTypewriterEffect();
+    initScrollReveal();
 });
 
 // 欢迎模块
@@ -799,4 +801,118 @@ function initTestModule() {
     }
 
     showQuestion(currentQuestion);
+}
+
+// 打字机效果初始化（不自动启动）
+function initTypewriterEffect() {
+    // 不自动启动，等待滚动显示后再启动
+}
+
+// 启动打字机效果
+function startTypewriterEffect() {
+    const containers = document.querySelectorAll('.typewriter-container');
+    
+    containers.forEach((container) => {
+        const output = container.querySelector('.typewriter-output');
+        const cursor = container.querySelector('.typewriter-cursor');
+        
+        if (!output) return;
+        
+        const text = `name = "小明"
+age = 12
+score = 95.5`;
+        
+        output.textContent = '';
+        
+        if (cursor) {
+            output.appendChild(cursor);
+        }
+        
+        let charIndex = 0;
+        
+        function typeCharacter() {
+            if (charIndex < text.length) {
+                const char = text[charIndex];
+                if (char === '\n') {
+                    output.insertBefore(document.createElement('br'), cursor);
+                } else {
+                    output.insertBefore(document.createTextNode(char), cursor);
+                }
+                charIndex++;
+                setTimeout(typeCharacter, 100);
+            }
+        }
+        
+        setTimeout(typeCharacter, 500);
+    });
+}
+
+// 滚动显示效果
+function initScrollReveal() {
+    const modules = document.querySelectorAll('.module');
+    const featureCards = document.querySelectorAll('.feature-card');
+    const quickStartContent = document.querySelector('.quick-start-content');
+    let typewriterStarted = false;
+    
+    // 页面加载时显示第一个模块和可见的feature-card
+    const firstModule = document.querySelector('.module');
+    if (firstModule) {
+        firstModule.classList.add('active');
+    }
+    
+    // 初始检测feature-card
+    setTimeout(() => {
+        const windowHeight = window.innerHeight;
+        featureCards.forEach((card) => {
+            const rect = card.getBoundingClientRect();
+            if (rect.top < windowHeight * 0.8) {
+                card.classList.add('visible');
+            }
+        });
+    }, 100);
+    
+    // 滚动检测
+    function checkScroll() {
+        const windowHeight = window.innerHeight;
+        
+        // 检测模块
+        modules.forEach((module) => {
+            const rect = module.getBoundingClientRect();
+            const moduleTop = rect.top;
+            const moduleHeight = rect.height;
+            
+            // 当模块进入视口70%时激活
+            if (moduleTop < windowHeight * 0.7 && moduleTop + moduleHeight > 0) {
+                module.classList.add('active');
+            }
+        });
+        
+        // 检测feature-card
+        featureCards.forEach((card) => {
+            const rect = card.getBoundingClientRect();
+            if (rect.top < windowHeight * 0.8) {
+                card.classList.add('visible');
+            }
+        });
+        
+        // 检测quick-start-content并触发打字机效果
+        if (quickStartContent && !quickStartContent.classList.contains('visible')) {
+            const rect = quickStartContent.getBoundingClientRect();
+            if (rect.top < windowHeight * 0.7) {
+                quickStartContent.classList.add('visible');
+                
+                // 打字机效果在显示后延迟启动
+                if (!typewriterStarted) {
+                    typewriterStarted = true;
+                    setTimeout(startTypewriterEffect, 300);
+                }
+            }
+        }
+    }
+    
+    // 初始检测
+    setTimeout(checkScroll, 100);
+    
+    // 滚动事件监听
+    window.addEventListener('scroll', checkScroll);
 }

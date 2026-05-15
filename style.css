@@ -488,6 +488,14 @@ body {
 
 .feature-card {
     padding: 20px;
+    opacity: 0;
+    transform: translateY(30px);
+    transition: opacity 0.5s ease, transform 0.5s ease;
+}
+
+.feature-card.visible {
+    opacity: 1;
+    transform: translateY(0);
 }
 
 .feature-card-inner {
@@ -510,8 +518,8 @@ body {
 .feature-image {
     width: 100%;
     height: auto;
-    max-height: 150px;
-    object-fit: cover;
+    max-height: 200px;
+    object-fit: contain;
     border-radius: 4px;
 }
 
@@ -529,6 +537,10 @@ body {
 
 .feature-icon {
     font-size: 2.5rem;
+}
+
+.feature-card-content {
+    padding: 16px;
 }
 
 .feature-card-content h3 {
@@ -552,6 +564,15 @@ body {
 .quick-start-content {
     max-width: 800px;
     margin: 0 auto;
+    padding: 32px 24px;
+    opacity: 0;
+    transform: translateY(30px);
+    transition: opacity 0.6s ease, transform 0.6s ease;
+}
+
+.quick-start-content.visible {
+    opacity: 1;
+    transform: translateY(0);
 }
 
 .quick-start h3 {
@@ -629,6 +650,7 @@ body {
 /* 情境导入模块 */
 .intro-content {
     text-align: center;
+    padding: 20px;
 }
 
 .story-scenes {
@@ -727,6 +749,7 @@ body {
     display: grid;
     grid-template-columns: 1fr 2fr;
     gap: 2rem;
+    padding: 20px;
 }
 
 .lab-sidebar {
@@ -926,6 +949,7 @@ body {
     display: grid;
     grid-template-columns: 2fr 1fr;
     gap: 2rem;
+    padding: 20px;
 }
 
 .court-room {
@@ -1003,6 +1027,7 @@ body {
     display: grid;
     grid-template-columns: 1fr 2fr;
     gap: 2rem;
+    padding: 20px;
 }
 
 .level-selector {
@@ -1646,4 +1671,34 @@ body {
     .w3-hide-large {
         display: none !important;
     }
+}
+
+.typewriter-container {
+    position: relative;
+    padding: 15px;
+    min-height: 80px;
+}
+
+.typewriter-output {
+    display: inline;
+    color: #ffffff;
+    font-family: Consolas, Monaco, 'Courier New', monospace;
+    font-size: 16px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+}
+
+.typewriter-cursor {
+    display: inline-block;
+    width: 10px;
+    height: 20px;
+    background-color: #4CAF50;
+    animation: blink 0.7s infinite;
+    vertical-align: middle;
+    margin-left: 2px;
+}
+
+@keyframes blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0; }
 }
