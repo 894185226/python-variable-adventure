@@ -1,37 +1,60 @@
-# python-variable-adventure
+# Python 变量专题学习网站
 
-#### 介绍
-Python变量探险教学网站
+面向中学生的 Python 变量专题互动学习平台，采用 B/S 架构，内置 10 个学习模块和 8 项成就系统。
 
-#### 软件架构
-软件架构说明
+## 技术栈
 
+| 层次 | 技术 |
+|------|------|
+| 前端 | HTML5 + CSS3 + JavaScript（W3.CSS） |
+| 后端 | Node.js + Express |
+| 数据库 | MySQL 8.0 |
 
-#### 安装教程
+## 功能模块
 
-1.  xxxx
-2.  xxxx
-3.  xxxx
+1. 🎬 **情境导入** — 动画场景引入变量概念
+2. 🧪 **生活类比实验室** — 拖拽体验变量名与值
+3. 📚 **知识讲解** — 变量定义、命名规则、赋值符号
+4. ⚖️ **命名小法官** — 判断变量名合法性（10题/轮）
+5. 💻 **实践操作** — 三级难度分层闯关
+6. 🔍 **值追踪挑战** — 追踪变量值变化过程
+7. 🏥 **错误调试诊所** — 找出并修复代码 Bug
+8. 🚀 **扩展思维** — 变量交换 + 句子拼接
+9. 🎨 **创意迷你项目** — 制作个性化电子名片
+10. 📝 **课堂小测** — 选择题检验 + 能力雷达图
 
-#### 使用说明
+## 特色功能
 
-1.  xxxx
-2.  xxxx
-3.  xxxx
+- Steam 风格成就弹出提示（8 项成就）
+- 智能搜索框（模糊关键词匹配 + 实时建议）
+- 滚动渐入动画、打字机效果
+- 未登录访问拦截 + MySQL 数据持久化
+- 响应式设计，支持移动端
 
-#### 参与贡献
+## 快速开始
 
-1.  Fork 本仓库
-2.  新建 Feat_xxx 分支
-3.  提交代码
-4.  新建 Pull Request
+### 环境要求
 
+- MySQL 8.0+
+- Node.js 16+
 
-#### 特技
+### 启动步骤
 
-1.  使用 Readme\_XXX.md 来支持不同的语言，例如 Readme\_en.md, Readme\_zh.md
-2.  Gitee 官方博客 [blog.gitee.com](https://blog.gitee.com)
-3.  你可以 [https://gitee.com/explore](https://gitee.com/explore) 这个地址来了解 Gitee 上的优秀开源项目
-4.  [GVP](https://gitee.com/gvp) 全称是 Gitee 最有价值开源项目，是综合评定出的优秀开源项目
-5.  Gitee 官方提供的使用手册 [https://gitee.com/help](https://gitee.com/help)
-6.  Gitee 封面人物是一档用来展示 Gitee 会员风采的栏目 [https://gitee.com/gitee-stars/](https://gitee.com/gitee-stars/)
+1. 初始化数据库（执行 `database.sql`）
+2. 安装依赖：`npm install`
+3. 双击 `start_server.bat`（自动检测环境，支持跨电脑移植）
+4. 浏览器访问 `http://localhost:3000`
+
+## 项目结构
+
+```
+.
+├── index.html          # 网站主页
+├── style.css           # 样式文件
+├── script.js           # 前端交互逻辑
+├── server.js           # Node.js 后端服务器
+├── database.sql        # 数据库建表脚本
+├── package.json        # Node.js 配置
+├── start_server.bat    # 一键启动脚本
+└── 使用手册.md          # 详细操作手册
+```
