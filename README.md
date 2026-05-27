@@ -6,16 +6,16 @@
 
 | 层次 | 技术 |
 |------|------|
-| 前端 | HTML5 + CSS3 + JavaScript（W3.CSS） |
+| 前端 | HTML5 + CSS3 + JavaScript（W3.CSS 风格） |
 | 后端 | Node.js + Express |
-| 数据库 | MySQL 8.0 |
+| 数据库 | MySQL 5.7 / 8.0 / 8.4 / 9.x |
 
 ## 功能模块
 
 1. 🎬 **情境导入** — 动画场景引入变量概念
 2. 🧪 **生活类比实验室** — 拖拽体验变量名与值
 3. 📚 **知识讲解** — 变量定义、命名规则、赋值符号
-4. ⚖️ **命名小法官** — 判断变量名合法性（10题/轮）
+4. ⚖️ **命名小法官** — 判断变量名合法性（10 题/轮）
 5. 💻 **实践操作** — 三级难度分层闯关
 6. 🔍 **值追踪挑战** — 追踪变量值变化过程
 7. 🏥 **错误调试诊所** — 找出并修复代码 Bug
@@ -25,36 +25,63 @@
 
 ## 特色功能
 
-- Steam 风格成就弹出提示（8 项成就）
-- 智能搜索框（模糊关键词匹配 + 实时建议）
-- 滚动渐入动画、打字机效果
-- 未登录访问拦截 + MySQL 数据持久化
-- 响应式设计，支持移动端
+- ⚡ **一键启动** — 双击 `start_server.bat` 自动完成所有环境配置
+- 🏆 **Steam 风格成就弹出** — 完成学习任务获得 8 项成就徽章
+- 🔍 **智能搜索** — 模糊关键词匹配 + 实时建议下拉
+- 🛡️ **未登录拦截** — 未登录用户仅可浏览首页
+- 🔐 **密码安全** — SHA256 哈希加密存储
+- 📱 **响应式设计** — 适配桌面端和移动端
 
 ## 快速开始
 
-### 环境要求
+### 一键启动（推荐）
 
-- MySQL 8.0+
-- Node.js 16+
+```bash
+双击项目中的 start_server.bat
+```
 
-### 启动步骤
+脚本自动完成：
+| 步骤 | 说明 |
+|------|------|
+| 检测 Node.js | 自动查找安装，缺失时 winget 一键安装 |
+| 安装依赖 | 自动执行 `npm install` |
+| 检测 MySQL | 自动搜索 5.7 ~ 9.7 全版本路径 |
+| 启动服务 | 自动启动 MySQL 系统服务 |
+| 初始化数据库 | `server.js` 自动创建数据库和 4 张数据表 |
+| 启动网站 | 浏览器访问 `http://localhost:3000` |
 
-1. 初始化数据库（执行 `database.sql`）
-2. 安装依赖：`npm install`
-3. 双击 `start_server.bat`（自动检测环境，支持跨电脑移植）
+> 首次启动可能需要几分钟（自动下载依赖）。支持复制到任何电脑直接使用。
+
+### 手动启动
+
+1. 安装 Node.js 16+ 和 MySQL 5.7+
+2. `npm install`
+3. `node server.js`
 4. 浏览器访问 `http://localhost:3000`
 
 ## 项目结构
 
 ```
-.
 ├── index.html          # 网站主页
 ├── style.css           # 样式文件
 ├── script.js           # 前端交互逻辑
-├── server.js           # Node.js 后端服务器
-├── database.sql        # 数据库建表脚本
+├── server.js           # Node.js 后端服务器（含自动建库建表）
+├── database.sql        # 数据库建表脚本（备用）
 ├── package.json        # Node.js 配置
-├── start_server.bat    # 一键启动脚本
+├── start_server.bat    # 一键启动脚本（核心）
 └── 使用手册.md          # 详细操作手册
 ```
+
+## 数据库表结构
+
+| 表名 | 用途 |
+|------|------|
+| `students` | 学生用户信息（SHA256 加密） |
+| `learning_progress` | 模块学习进度与得分 |
+| `achievements` | 成就获得记录 |
+| `login_logs` | 登录日志 |
+
+## 仓库
+
+- Gitee: https://gitee.com/fiveubisoft/python-variable-adventure
+- GitHub: https://github.com/894185226/python-variable-adventure
