@@ -15,9 +15,53 @@ const PORT = 3000;
 
 // 中间件
 app.use(cors());
-app.use(express.json());
-// 托管静态文件（index.html, style.css, script.js 等）
+app.use(express.json({ limit: '10kb' })); // 限制请求体大小，防止恶意大请求
 app.use(express.static(__dirname));
+
+// ===================================================
+// 简易速率限制（防止暴力破解）
+// ===================================================
+const rateLimitMap = new Map();
+const RATE_LIMIT_WINDOW = 60 * 1000; // 1 分钟
+const RATE_LIMIT_MAX = 20;           // 最多 20 次请求
+
+function rateLimit(req, res, next) {
+    const ip = req.ip || req.connection.remoteAddress || 'unknown';
+    const now = Date.now();
+    const record = rateLimitMap.get(ip);
+
+    if (record && now - record.start < RATE_LIMIT_WINDOW) {
+        if (record.count >= RATE_LIMIT_MAX) {
+            return res.status(429).json({ success: false, error: '请求过于频繁，请稍后再试' });
+        }
+        record.count++;
+    } else {
+        rateLimitMap.set(ip, { start: now, count: 1 });
+    }
+    next();
+}
+// 对 /api 路径启用速率限制
+app.use('/api', rateLimit);
+
+// 定期清理过期记录
+setInterval(() => {
+    const now = Date.now();
+    for (const [ip, record] of rateLimitMap) {
+        if (now - record.start > RATE_LIMIT_WINDOW) rateLimitMap.delete(ip);
+    }
+}, 60000);
+
+// ===================================================
+// 输入校验工具函数
+// ===================================================
+function validateInput(fields) {
+    for (const [key, value] of Object.entries(fields)) {
+        if (typeof value !== 'string') return `${key} 格式错误`;
+        if (value.trim().length === 0) return `${key} 不能为空`;
+        if (value.length > 100) return `${key} 长度不能超过100个字符`;
+    }
+    return null;
+}
 
 // ===================================================
 // 数据库初始化（自动创建数据库和表，无需手动导入 database.sql）
@@ -62,7 +106,7 @@ async function initializeDatabase() {
             CREATE TABLE IF NOT EXISTS students (
                 id          INT AUTO_INCREMENT PRIMARY KEY COMMENT '学生唯一编号',
                 username    VARCHAR(50)  NOT NULL UNIQUE COMMENT '登录用户名',
-                password    VARCHAR(255) NOT NULL COMMENT '密码（SHA256 哈希）',
+                password    VARCHAR(64)  NOT NULL COMMENT '密码（SHA256 哈希）',
                 display_name VARCHAR(50) NOT NULL COMMENT '真实姓名/显示名称',
                 class_name  VARCHAR(50)  DEFAULT '' COMMENT '班级',
                 created_at  DATETIME     DEFAULT CURRENT_TIMESTAMP COMMENT '注册时间',
@@ -109,6 +153,20 @@ async function initializeDatabase() {
         `);
 
         console.log('[初始化] 所有数据表就绪');
+
+        // 插入测试账号（仅在新环境首次运行时）
+        const [existing] = await dbPool.execute(
+            'SELECT COUNT(*) AS cnt FROM students WHERE username IN (?, ?)',
+            ['test001', 'test002']
+        );
+        if (existing[0].cnt === 0) {
+            await dbPool.execute(
+                `INSERT INTO students (username, password, display_name, class_name) VALUES
+                 ('test001', SHA2('1234', 256), '张三', '初一(3)班'),
+                 ('test002', SHA2('1234', 256), '李四', '初一(3)班')`
+            );
+            console.log('[初始化] 已插入测试账号 (test001 / test002, 密码: 1234)');
+        }
     } finally {
         await dbPool.end();
     }
@@ -140,17 +198,21 @@ function hashPassword(password) {
 app.post('/api/register', async (req, res) => {
     try {
         const { username, password, displayName } = req.body;
-        if (!username || !password || !displayName) {
-            return res.json({ success: false, error: '请填写所有字段' });
-        }
+
+        // 服务端输入校验
+        const errMsg = validateInput({ username, password, displayName });
+        if (errMsg) return res.json({ success: false, error: errMsg });
         if (password.length < 4) {
             return res.json({ success: false, error: '密码至少4位' });
+        }
+        if (username.length < 2) {
+            return res.json({ success: false, error: '用户名至少2位' });
         }
 
         const hashed = hashPassword(password);
         await pool.execute(
             'INSERT INTO students (username, password, display_name) VALUES (?, ?, ?)',
-            [username, hashed, displayName]
+            [username.trim(), hashed, displayName.trim()]
         );
         res.json({ success: true });
     } catch (err) {
@@ -167,14 +229,15 @@ app.post('/api/register', async (req, res) => {
 app.post('/api/login', async (req, res) => {
     try {
         const { username, password } = req.body;
-        if (!username || !password) {
-            return res.json({ success: false, error: '请输入用户名和密码' });
-        }
+
+        // 服务端输入校验
+        const errMsg = validateInput({ username, password });
+        if (errMsg) return res.json({ success: false, error: errMsg });
 
         const hashed = hashPassword(password);
         const [rows] = await pool.execute(
             'SELECT id, username, display_name FROM students WHERE username = ? AND password = ?',
-            [username, hashed]
+            [username.trim(), hashed]
         );
 
         if (rows.length === 0) {
@@ -263,6 +326,14 @@ app.post('/api/progress/mark', async (req, res) => {
         if (!username || !moduleId) {
             return res.json({ success: false, error: '参数不完整' });
         }
+        // 模块ID白名单校验
+        const validModules = ['intro', 'lab', 'lesson', 'judge', 'practice', 'trace', 'debug', 'extend', 'project', 'test'];
+        if (!validModules.includes(moduleId)) {
+            return res.json({ success: false, error: '无效的模块ID' });
+        }
+        if (username.length > 50 || moduleId.length > 30) {
+            return res.json({ success: false, error: '参数过长' });
+        }
 
         const [students] = await pool.execute(
             'SELECT id FROM students WHERE username = ?', [username]
@@ -272,12 +343,13 @@ app.post('/api/progress/mark', async (req, res) => {
         }
 
         const studentId = students[0].id;
+        const validScore = Math.min(100, Math.max(0, parseInt(score) || 0));
 
         await pool.execute(
             `INSERT INTO learning_progress (student_id, module_id, completed, score, completed_at)
              VALUES (?, ?, 1, ?, NOW())
              ON DUPLICATE KEY UPDATE completed = 1, score = VALUES(score), completed_at = NOW()`,
-            [studentId, moduleId, score || 0]
+            [studentId, moduleId, validScore]
         );
 
         res.json({ success: true });
@@ -293,6 +365,14 @@ app.post('/api/achievement/award', async (req, res) => {
         const { username, achievementId } = req.body;
         if (!username || !achievementId) {
             return res.json({ success: false, error: '参数不完整' });
+        }
+        // 成就ID白名单校验
+        const validAchievements = ['beginner', 'judge', 'debugger', 'creator', 'champion', 'tracer', 'explorer', 'coder'];
+        if (!validAchievements.includes(achievementId)) {
+            return res.json({ success: false, error: '无效的成就ID' });
+        }
+        if (username.length > 50 || achievementId.length > 30) {
+            return res.json({ success: false, error: '参数过长' });
         }
 
         const [students] = await pool.execute(
@@ -315,6 +395,17 @@ app.post('/api/achievement/award', async (req, res) => {
         console.error('成就错误:', err);
         res.json({ success: false, error: '服务器错误' });
     }
+});
+
+// ===================================================
+// 全局错误处理
+// ===================================================
+app.use((err, req, res, next) => {
+    console.error('未捕获的服务器错误:', err.message);
+    if (err.type === 'entity.too.large') {
+        return res.json({ success: false, error: '请求体过大' });
+    }
+    res.status(500).json({ success: false, error: '服务器内部错误' });
 });
 
 // ===================================================

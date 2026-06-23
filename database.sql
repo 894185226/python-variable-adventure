@@ -16,7 +16,7 @@ USE python_var_lesson;
 CREATE TABLE IF NOT EXISTS students (
     id          INT AUTO_INCREMENT PRIMARY KEY COMMENT '学生唯一编号',
     username    VARCHAR(50)  NOT NULL UNIQUE COMMENT '登录用户名',
-    password    VARCHAR(255) NOT NULL COMMENT '密码（SHA256 哈希）',
+    password    VARCHAR(64)  NOT NULL COMMENT '密码（SHA256 哈希）',
     display_name VARCHAR(50) NOT NULL COMMENT '真实姓名/显示名称',
     class_name  VARCHAR(50)  DEFAULT '' COMMENT '班级',
     created_at  DATETIME     DEFAULT CURRENT_TIMESTAMP COMMENT '注册时间',
@@ -64,6 +64,6 @@ CREATE TABLE IF NOT EXISTS login_logs (
 -- ===================================================
 -- 6. 插入测试数据（可选）
 -- ===================================================
--- INSERT INTO students (username, password, display_name, class_name) VALUES
---   ('test001', SHA2('1234', 256), '张三', '初一(3)班'),
---   ('test002', SHA2('1234', 256), '李四', '初一(3)班');
+INSERT IGNORE INTO students (username, password, display_name, class_name) VALUES
+  ('test001', SHA2('1234', 256), '张三', '初一(3)班'),
+  ('test002', SHA2('1234', 256), '李四', '初一(3)班');

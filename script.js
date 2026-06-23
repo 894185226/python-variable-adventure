@@ -2,49 +2,226 @@
 // 后端地址配置
 const API_BASE = 'http://localhost:3000/api';
 
+// 调试开关：生产环境设为 false
+const DEBUG = false;
+const log = { log: DEBUG ? console.log.bind(console) : () => {}, warn: console.warn.bind(console), error: console.error.bind(console) };
+
+// 通用错误提示条
+function showToast(message, type = 'error') {
+    const container = document.getElementById('achievementToastContainer');
+    if (!container) return;
+
+    const toast = document.createElement('div');
+    toast.className = `achievement-toast ${type === 'error' ? 'toast-error' : 'toast-success'}`;
+    toast.innerHTML = `
+        <div class="achievement-toast-icon">${type === 'error' ? '⚠️' : '✅'}</div>
+        <div class="achievement-toast-body">
+            <div class="achievement-toast-title">${type === 'error' ? '提示' : '成功'}</div>
+            <div class="achievement-toast-desc">${message}</div>
+        </div>
+    `;
+    container.appendChild(toast);
+
+    setTimeout(() => {
+        toast.classList.add('removing');
+        setTimeout(() => {
+            if (toast.parentNode) toast.parentNode.removeChild(toast);
+        }, 400);
+    }, 3000);
+}
+
+// 按钮加载态管理
+function setButtonLoading(btn, loading) {
+    if (!btn) return;
+    const originalHTML = btn._originalHTML || btn.innerHTML;
+    if (loading) {
+        btn._originalHTML = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="btn-spinner"></span> 处理中...';
+    } else {
+        btn.disabled = false;
+        btn.innerHTML = btn._originalHTML;
+        delete btn._originalHTML;
+    }
+}
+
+// 暗色主题切换
+const THEME_KEY = 'pv_theme';
+function initTheme() {
+    const saved = localStorage.getItem(THEME_KEY);
+    if (saved === 'light') {
+        document.documentElement.setAttribute('data-theme', 'light');
+        updateThemeIcon(false);
+    } else {
+        // 默认暗色主题
+        document.documentElement.setAttribute('data-theme', 'dark');
+        updateThemeIcon(true);
+    }
+}
+
+function toggleTheme() {
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    if (isDark) {
+        document.documentElement.setAttribute('data-theme', 'light');
+        localStorage.setItem(THEME_KEY, 'light');
+    } else {
+        document.documentElement.setAttribute('data-theme', 'dark');
+        localStorage.setItem(THEME_KEY, 'dark');
+    }
+    updateThemeIcon(!isDark);
+}
+
+function updateThemeIcon(isDark) {
+    const icon = document.getElementById('themeIcon');
+    if (icon) {
+        icon.className = isDark ? 'fas fa-sun' : 'far fa-moon';
+    }
+}
+
+// 图片懒加载渐入
+function initLazyImages() {
+    document.querySelectorAll('img[loading="lazy"]').forEach(img => {
+        img.addEventListener('load', () => img.classList.add('loaded'));
+        if (img.complete) img.classList.add('loaded');
+    });
+}
+
+// 页面加载完成后初始化
+document.addEventListener('DOMContentLoaded', () => {
+    initLazyImages();
+});
+
 const API = {
+    // 通用 fetch 封装
+    async _fetch(url, options = {}) {
+        try {
+            const res = await fetch(url, options);
+            if (!res.ok) {
+                throw new Error(`服务器错误 (${res.status})`);
+            }
+            return await res.json();
+        } catch (e) {
+            if (e.name === 'TypeError' && e.message.includes('fetch')) {
+                throw new Error('无法连接服务器，请确认后端已启动');
+            }
+            throw e;
+        }
+    },
+
     // 注册
     async register(username, password, displayName) {
-        const res = await fetch(API_BASE + '/register', {
+        return await this._fetch(API_BASE + '/register', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username, password, displayName })
         });
-        return await res.json();
     },
     // 登录
     async login(username, password) {
-        const res = await fetch(API_BASE + '/login', {
+        return await this._fetch(API_BASE + '/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username, password })
         });
-        return await res.json();
     },
     // 获取用户学习进度
     async getProgress(username) {
-        const res = await fetch(API_BASE + '/progress/' + encodeURIComponent(username));
-        return await res.json();
+        return await this._fetch(API_BASE + '/progress/' + encodeURIComponent(username));
     },
     // 标记模块完成
     async markModuleCompleted(username, moduleId, score) {
-        const res = await fetch(API_BASE + '/progress/mark', {
+        return await this._fetch(API_BASE + '/progress/mark', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username, moduleId, score })
         });
-        return await res.json();
     },
     // 颁发成就
     async awardAchievement(username, achievementId) {
-        const res = await fetch(API_BASE + '/achievement/award', {
+        return await this._fetch(API_BASE + '/achievement/award', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username, achievementId })
         });
-        return await res.json();
     }
 };
+
+// ===== 本地进度管理（未登录时用 localStorage 持久化） =====
+const LOCAL_PROGRESS_KEY = 'pv_local_progress';
+const LOCAL_ACHIEVEMENTS_KEY = 'pv_local_achievements';
+
+function getLocalProgress() {
+    try {
+        const data = localStorage.getItem(LOCAL_PROGRESS_KEY);
+        return data ? JSON.parse(data) : { modules: {}, achievements: {}, loginDates: [] };
+    } catch (e) {
+        return { modules: {}, achievements: {}, loginDates: [] };
+    }
+}
+
+function saveLocalProgress(progress) {
+    try {
+        localStorage.setItem(LOCAL_PROGRESS_KEY, JSON.stringify(progress));
+    } catch (e) {
+        log.warn('localStorage 存储失败，可能已满');
+    }
+}
+
+function getLocalAchievements() {
+    try {
+        const data = localStorage.getItem(LOCAL_ACHIEVEMENTS_KEY);
+        return data ? JSON.parse(data) : {};
+    } catch (e) {
+        return {};
+    }
+}
+
+function saveLocalAchievement(achId) {
+    const ach = getLocalAchievements();
+    ach[achId] = new Date().toISOString();
+    try {
+        localStorage.setItem(LOCAL_ACHIEVEMENTS_KEY, JSON.stringify(ach));
+    } catch (e) {
+        log.warn('localStorage 存储失败');
+    }
+}
+
+// 登录时将本地进度同步到后端
+async function syncLocalProgressToBackend(username) {
+    const localProgress = getLocalProgress();
+    const localAchievements = getLocalAchievements();
+    const modules = Object.keys(localProgress.modules);
+
+    if (modules.length === 0 && Object.keys(localAchievements).length === 0) return;
+
+    log.log(`正在同步 ${modules.length} 个模块进度到服务器...`);
+
+    // 同步模块进度
+    for (const moduleId of modules) {
+        try {
+            await API.markModuleCompleted(username, moduleId);
+        } catch (e) {
+            log.warn(`同步模块 ${moduleId} 失败:`, e.message);
+        }
+    }
+
+    // 同步成就
+    for (const achId of Object.keys(localAchievements)) {
+        try {
+            await API.awardAchievement(username, achId);
+        } catch (e) {
+            log.warn(`同步成就 ${achId} 失败:`, e.message);
+        }
+    }
+
+    // 同步完成后清除本地数据
+    try {
+        localStorage.removeItem(LOCAL_PROGRESS_KEY);
+        localStorage.removeItem(LOCAL_ACHIEVEMENTS_KEY);
+    } catch (e) {
+        log.warn('清除本地缓存失败');
+    }
+}
 
 // 会话管理（仅存当前用户名，敏感操作走后端）
 function getCurrentUser() {
@@ -121,8 +298,20 @@ async function handleLogin(event) {
     const username = document.getElementById('loginUsername').value.trim();
     const password = document.getElementById('loginPassword').value.trim();
     const errorEl = document.getElementById('loginError');
+    const submitBtn = document.querySelector('#loginForm .form-submit-btn');
 
-    const result = await API.login(username, password);
+    setButtonLoading(submitBtn, true);
+    let result;
+    try {
+        result = await API.login(username, password);
+    } catch (e) {
+        errorEl.textContent = e.message || '网络错误，请稍后重试';
+        errorEl.classList.remove('w3-hide');
+        setButtonLoading(submitBtn, false);
+        return false;
+    }
+    setButtonLoading(submitBtn, false);
+
     if (!result.success) {
         errorEl.textContent = result.error;
         errorEl.classList.remove('w3-hide');
@@ -136,6 +325,9 @@ async function handleLogin(event) {
     document.getElementById('loginUsername').value = '';
     document.getElementById('loginPassword').value = '';
     errorEl.classList.add('w3-hide');
+    
+    // 同步本地进度到后端
+    await syncLocalProgressToBackend(result.user.username);
     
     // 刷新成就墙
     renderAchievementWall();
@@ -156,6 +348,7 @@ async function handleRegister(event) {
     const password = document.getElementById('regPassword').value.trim();
     const displayName = document.getElementById('regDisplayName').value.trim();
     const errorEl = document.getElementById('registerError');
+    const submitBtn = document.querySelector('#registerForm .form-submit-btn');
 
     if (username.length < 2) {
         errorEl.textContent = '用户名至少需要2个字符！';
@@ -168,7 +361,18 @@ async function handleRegister(event) {
         return false;
     }
 
-    const result = await API.register(username, password, displayName);
+    setButtonLoading(submitBtn, true);
+    let result;
+    try {
+        result = await API.register(username, password, displayName);
+    } catch (e) {
+        errorEl.textContent = e.message || '网络错误，请稍后重试';
+        errorEl.classList.remove('w3-hide');
+        setButtonLoading(submitBtn, false);
+        return false;
+    }
+    setButtonLoading(submitBtn, false);
+
     if (!result.success) {
         errorEl.textContent = result.error;
         errorEl.classList.remove('w3-hide');
@@ -213,33 +417,88 @@ function updateLoginUI() {
 // ===== 学习进度追踪 =====
 async function markModuleCompleted(moduleId) {
     const currentUser = getCurrentUser();
-    if (!currentUser) return; // 未登录不记录
-    
-    await API.markModuleCompleted(currentUser.username, moduleId);
-    
-    // 检查并颁发成就
-    const newAch = await checkAndAwardAchievements(currentUser.username);
-    if (newAch.length > 0) {
-        console.log('新成就：', newAch);
-        newAch.forEach(ach => showAchievementToast(ach));
+
+    if (currentUser) {
+        // 已登录：保存到后端
+        try {
+            await API.markModuleCompleted(currentUser.username, moduleId);
+        } catch (e) {
+            log.error('保存进度失败，将存入本地:', e.message);
+            saveLocalModule(moduleId);
+        }
+
+        // 检查并颁发成就
+        try {
+            const newAch = await checkAndAwardAchievements(currentUser.username);
+            if (newAch.length > 0) {
+                log.log('新成就：', newAch);
+                newAch.forEach(ach => showAchievementToast(ach));
+            }
+        } catch (e) {
+            log.error('检查成就失败:', e.message);
+        }
+    } else {
+        // 未登录：存入 localStorage
+        saveLocalModule(moduleId);
+        // 本地也检查成就
+        checkLocalAchievements();
+    }
+}
+
+// 保存单个模块到 localStorage
+function saveLocalModule(moduleId) {
+    const progress = getLocalProgress();
+    if (!progress.modules[moduleId]) {
+        progress.modules[moduleId] = true;
+        if (!progress.loginDates.includes(new Date().toLocaleDateString('zh-CN'))) {
+            progress.loginDates.push(new Date().toLocaleDateString('zh-CN'));
+        }
+        saveLocalProgress(progress);
+    }
+}
+
+// 检查本地成就
+function checkLocalAchievements() {
+    const progress = getLocalProgress();
+    const earned = getLocalAchievements();
+    let hasNew = false;
+
+    ACHIEVEMENTS.forEach(ach => {
+        if (!earned[ach.id] && ach.check(progress)) {
+            saveLocalAchievement(ach.id);
+            showAchievementToast(ach);
+            hasNew = true;
+        }
+    });
+
+    if (hasNew) {
+        renderAchievementWall();
     }
 }
 
 async function checkAndAwardAchievements(username) {
-    const progress = await API.getProgress(username);
-    const newAchievements = [];
-    
-    for (const ach of ACHIEVEMENTS) {
-        if (ach.check(progress)) {
-            if (!progress.achievements[ach.id]) {
-                // 后端会忽略重复颁发，但先检查减少请求
-                await API.awardAchievement(username, ach.id);
-                newAchievements.push(ach);
+    try {
+        const progress = await API.getProgress(username);
+        const newAchievements = [];
+        
+        for (const ach of ACHIEVEMENTS) {
+            if (ach.check(progress)) {
+                if (!progress.achievements[ach.id]) {
+                    try {
+                        await API.awardAchievement(username, ach.id);
+                        newAchievements.push(ach);
+                    } catch (e) {
+                        log.warn(`颁发成就 ${ach.id} 失败:`, e.message);
+                    }
+                }
             }
         }
+        
+        return newAchievements;
+    } catch (e) {
+        log.error('检查成就失败:', e.message);
+        return [];
     }
-    
-    return newAchievements;
 }
 
 // ===== 成就弹出提示 =====
@@ -281,22 +540,66 @@ async function renderAchievementWall() {
     const achievementList = document.getElementById('achievementList');
     const learningStats = document.getElementById('learningStats');
 
+    let progress;
+
     if (!currentUser) {
-        // 未登录状态
-        if (userNameEl) userNameEl.textContent = '请先登录以查看学习成果！';
-        if (learningStats) learningStats.style.display = 'none';
-        updateMapGrid(null);
-        if (achievementList) achievementList.innerHTML = '<p style="text-align:center;color:#999;">登录后可查看成就</p>';
-        if (progressSummary) progressSummary.textContent = '总进度：请先登录';
+        // 未登录状态：使用 localStorage 数据
+        progress = getLocalProgress();
+        const achievements = getLocalAchievements();
+
+        if (userNameEl) userNameEl.textContent = '未登录 - 进度已本地保存，登录后可同步！';
+
+        updateMapGrid(progress);
+
+        const completedCount = Object.keys(progress.modules).length;
+        const totalModules = 10;
+        const percent = Math.round((completedCount / totalModules) * 100);
+
+        if (progressSummary) {
+            progressSummary.textContent = `总进度：${completedCount}/${totalModules} 模块完成 (${percent}%)`;
+        }
         if (progressBar) {
-            progressBar.style.width = '0%';
-            progressBar.textContent = '0%';
+            progressBar.style.width = percent + '%';
+            progressBar.textContent = percent + '%';
+        }
+
+        // 显示成就列表
+        if (achievementList) {
+            achievementList.innerHTML = ACHIEVEMENTS.map(ach => {
+                const earned = !!achievements[ach.id];
+                const dateStr = earned ? new Date(achievements[ach.id]).toLocaleDateString('zh-CN') : '';
+                return `
+                    <div class="achievement-item ${earned ? 'earned' : 'locked'}">
+                        <span class="ach-icon">${ach.icon}</span>
+                        <div class="ach-info">
+                            <h4>${ach.icon} ${ach.name}</h4>
+                            <p>${ach.desc}</p>
+                        </div>
+                        ${earned ? `<span class="achievement-date">${dateStr}</span>` : '<span class="achievement-date">未获得</span>'}
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // 学习统计
+        if (learningStats) {
+            learningStats.style.display = 'block';
+            document.getElementById('statCompleted').textContent = completedCount;
+            document.getElementById('statAchievements').textContent = Object.keys(achievements).length;
+            document.getElementById('statDays').textContent = progress.loginDates.length;
         }
         return;
     }
 
-    const progress = await API.getProgress(currentUser.username);
-    
+    // 已登录：使用后端数据
+    try {
+        progress = await API.getProgress(currentUser.username);
+    } catch (e) {
+        log.error('获取进度失败:', e.message);
+        if (achievementList) achievementList.innerHTML = '<p style="text-align:center;color:#999;">无法连接服务器，请检查网络</p>';
+        return;
+    }
+
     if (userNameEl) {
         userNameEl.textContent = currentUser.displayName + ' 的学习成果';
     }
@@ -463,6 +766,8 @@ const state = {
 
 // 页面加载完成后初始化
 document.addEventListener('DOMContentLoaded', () => {
+    // 初始化主题
+    initTheme();
     // 初始化用户登录UI
     updateLoginUI();
     
@@ -483,6 +788,38 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // 如果在成就墙模块，刷新显示
     renderAchievementWall();
+
+    // 全局键盘快捷键
+    window.addEventListener('keydown', (e) => {
+        // Esc - 关闭所有弹窗
+        if (e.key === 'Escape') {
+            closeAllModals();
+            closeMobileMenu();
+        }
+        // Ctrl+K / Cmd+K - 聚焦搜索框
+        if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+            e.preventDefault();
+            const searchInput = document.getElementById('search-input');
+            if (searchInput) {
+                searchInput.focus();
+                searchInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }
+    });
+
+    // 浏览器前进/后退支持
+    window.addEventListener('hashchange', () => {
+        const hash = window.location.hash.replace('#', '');
+        if (hash && hash !== state.currentModule) {
+            switchModule(hash);
+        }
+    });
+
+    // 初始 hash 处理（支持书签直接跳转）
+    const initHash = window.location.hash.replace('#', '');
+    if (initHash && initHash !== 'welcome') {
+        switchModule(initHash);
+    }
 });
 
 // 欢迎模块
@@ -530,7 +867,7 @@ function initNavigation() {
     });
     
     // 导航链接（包含所有带有 data-module 属性的链接）
-    const navLinks = document.querySelectorAll('.nav-link, [data-module]');
+    const navLinks = document.querySelectorAll('.nav-link, .mobile-nav-link, .w3-button[data-module]');
     navLinks.forEach(link => {
         link.addEventListener('click', function(e) {
             e.preventDefault();
@@ -658,53 +995,65 @@ function longestCommonSubseq(a, b) {
 
 // 搜索建议下拉
 function showSearchSuggestions(inputId) {
-    const input = document.getElementById(inputId);
-    if (!input) return;
-    const searchTerm = input.value.trim();
-    const results = matchModules(searchTerm).slice(0, 6);
+    try {
+        const input = document.getElementById(inputId);
+        if (!input) return;
+        const searchTerm = input.value.trim();
+        const results = matchModules(searchTerm).slice(0, 6);
 
-    // 找到对应的建议容器
-    const suggestionsId = inputId === 'hero-search-input' ? 'hero-search-suggestions' : 'search-suggestions';
-    const suggestionsEl = document.getElementById(suggestionsId);
-    if (!suggestionsEl) return;
+        // 找到对应的建议容器
+        const suggestionsId = inputId === 'hero-search-input' ? 'hero-search-suggestions' : 'search-suggestions';
+        const suggestionsEl = document.getElementById(suggestionsId);
+        if (!suggestionsEl) return;
 
-    if (results.length === 0 || !searchTerm) {
-        suggestionsEl.classList.remove('active');
-    } else {
-        suggestionsEl.innerHTML = results.map(r => `
-            <div class="search-suggestion-item" onclick="navigateToModule('${r.moduleId}')">
-                <span class="search-suggestion-icon">${r.icon}</span>
-                <div>
-                    <div class="search-suggestion-text">${r.name}</div>
-                    <div class="search-suggestion-desc">${r.desc}</div>
+        if (results.length === 0 || !searchTerm) {
+            suggestionsEl.classList.remove('active');
+        } else {
+            suggestionsEl.innerHTML = results.map(r => `
+                <div class="search-suggestion-item" onclick="navigateToModule('${r.moduleId}')">
+                    <span class="search-suggestion-icon">${r.icon}</span>
+                    <div>
+                        <div class="search-suggestion-text">${r.name}</div>
+                        <div class="search-suggestion-desc">${r.desc}</div>
+                    </div>
                 </div>
-            </div>
-        `).join('');
-        suggestionsEl.classList.add('active');
+            `).join('');
+            suggestionsEl.classList.add('active');
+        }
+    } catch (e) {
+        log.error('搜索建议出错:', e);
     }
 }
 
 // 跳转到模块
 function navigateToModule(moduleId) {
-    // 隐藏所有建议下拉
-    document.querySelectorAll('.search-suggestions').forEach(el => el.classList.remove('active'));
-    switchModule(moduleId);
+    try {
+        // 隐藏所有建议下拉
+        document.querySelectorAll('.search-suggestions').forEach(el => el.classList.remove('active'));
+        switchModule(moduleId);
+    } catch (e) {
+        log.error('导航出错:', e);
+    }
 }
 
 // 搜索功能（提交时调用）
 function search(inputId) {
-    const input = document.getElementById(inputId);
-    if (!input) return false;
-    const searchTerm = input.value.trim();
-    if (!searchTerm) return false;
+    try {
+        const input = document.getElementById(inputId);
+        if (!input) return false;
+        const searchTerm = input.value.trim();
+        if (!searchTerm) return false;
 
-    const results = matchModules(searchTerm);
-    if (results.length > 0) {
-        // 隐藏建议下拉
-        document.querySelectorAll('.search-suggestions').forEach(el => el.classList.remove('active'));
-        switchModule(results[0].moduleId);
-    } else {
-        alert(`未找到与"${searchTerm}"相关的内容，请尝试：变量、代码、调试、测验等关键词`);
+        const results = matchModules(searchTerm);
+        if (results.length > 0) {
+            // 隐藏建议下拉
+            document.querySelectorAll('.search-suggestions').forEach(el => el.classList.remove('active'));
+            switchModule(results[0].moduleId);
+        } else {
+            alert(`未找到与"${searchTerm}"相关的内容，请尝试：变量、代码、调试、测验等关键词`);
+        }
+    } catch (e) {
+        log.error('搜索出错:', e);
     }
     return false;
 }
@@ -719,10 +1068,12 @@ document.addEventListener('click', function(e) {
 // 移动端菜单控制
 function toggleMobileMenu() {
     document.getElementById('mobileMenuModal').style.display = 'block';
+    document.body.style.overflow = 'hidden'; // 锁定背景滚动
 }
 
 function closeMobileMenu() {
     document.getElementById('mobileMenuModal').style.display = 'none';
+    document.body.style.overflow = ''; // 恢复滚动
 }
 
 function switchModule(moduleId) {
@@ -730,7 +1081,7 @@ function switchModule(moduleId) {
     const targetModule = document.getElementById(moduleId);
     
     if (!targetModule) {
-        console.error('Module not found:', moduleId);
+        log.error('Module not found:', moduleId);
         return;
     }
 
@@ -745,9 +1096,20 @@ function switchModule(moduleId) {
         }
     }
     
+    // 离开情境导入时清理动画，避免内存泄漏
+    if (state.currentModule === 'intro') {
+        stopIntroAnimations();
+    }
+    
     modules.forEach(module => module.classList.remove('active'));
     targetModule.classList.add('active');
     state.currentModule = moduleId;
+
+    // 更新 URL hash（用于书签和浏览器前进后退）
+    window.location.hash = '#' + moduleId;
+
+    // 高亮导航栏当前模块
+    updateNavActiveState(moduleId);
 
     // 注意：不再在此处自动标记模块完成
     // 各模块需在用户实际完成交互后才调用 markModuleCompleted()
@@ -759,6 +1121,49 @@ function switchModule(moduleId) {
     // 如果切换到知识讲解，刷新按钮状态
     if (moduleId === 'lesson') {
         refreshLessonButton();
+    }
+
+    // 平滑滚动到模块顶部
+    setTimeout(() => {
+        targetModule.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 50);
+}
+
+// 更新导航栏激活状态
+function updateNavActiveState(moduleId) {
+    // 桌面端导航项（仅下拉菜单触发按钮）
+    document.querySelectorAll('.w3-bar > .w3-bar-item.w3-hide-small > .w3-button.w3-hover-green').forEach(item => {
+        item.classList.remove('active-nav');
+    });
+    // 移动端导航项
+    document.querySelectorAll('.mobile-nav-link').forEach(item => {
+        item.classList.remove('active-nav');
+    });
+    
+    // 根据当前模块高亮对应导航项
+    const navMap = {
+        'intro': 'tutorials',
+        'lesson': 'tutorials',
+        'lab': 'tutorials',
+        'practice': 'practice',
+        'judge': 'practice',
+        'trace': 'practice',
+        'debug': 'challenge',
+        'extend': 'challenge',
+        'test': 'challenge',
+        'project': 'project',
+        'achievement': 'project'
+    };
+    
+    const navId = navMap[moduleId];
+    if (navId) {
+        const desktopBtns = document.querySelectorAll('.w3-bar > .w3-bar-item.w3-hide-small > .w3-button.w3-hover-green');
+        desktopBtns.forEach(btn => {
+            const onclick = btn.getAttribute('onclick') || '';
+            if (onclick.includes(`'${navId}'`)) {
+                btn.classList.add('active-nav');
+            }
+        });
     }
 }
 
@@ -783,41 +1188,56 @@ function initIntroModule() {
     });
 
     // 动画效果
+    startIntroAnimations();
+}
+
+// 情境导入动画管理（存储 interval ID 避免内存泄漏）
+const _introAnimIntervals = [];
+
+function startIntroAnimations() {
     animateScore();
     animateNames();
     animateCountdown();
 }
 
+function stopIntroAnimations() {
+    _introAnimIntervals.forEach(id => clearInterval(id));
+    _introAnimIntervals.length = 0;
+}
+
 function animateScore() {
     const scoreSpan = document.querySelector('.score');
+    if (!scoreSpan) return;
     let score = 0;
-    setInterval(() => {
+    _introAnimIntervals.push(setInterval(() => {
         score += Math.floor(Math.random() * 10) + 1;
         scoreSpan.textContent = score;
         if (score >= 100) score = 0;
-    }, 200);
+    }, 200));
 }
 
 function animateNames() {
     const names = ['张三', '李四', '王五', '赵六', '小明'];
     const nameSpan = document.querySelector('.name');
+    if (!nameSpan) return;
     let index = 0;
-    setInterval(() => {
+    _introAnimIntervals.push(setInterval(() => {
         index = (index + 1) % names.length;
         nameSpan.textContent = names[index];
-    }, 1500);
+    }, 1500));
 }
 
 function animateCountdown() {
     const countdownSpan = document.querySelector('.countdown');
+    if (!countdownSpan) return;
     let count = 10;
-    const interval = setInterval(() => {
+    _introAnimIntervals.push(setInterval(() => {
         count--;
         countdownSpan.textContent = count;
         if (count <= 0) {
             count = 10;
         }
-    }, 1000);
+    }, 1000));
 }
 
 // 知识讲解模块
@@ -909,7 +1329,7 @@ function initLabModule() {
             labLabelDropped = true;
             boxLabelArea.textContent = value;
             codeLabel.textContent = value;
-            variableBox.style.borderColor = '#667eea';
+            variableBox.style.borderColor = 'var(--primary-purple)';
         } else if (type === 'data') {
             currentValue = value;
             labValueDropped = true;
@@ -918,10 +1338,10 @@ function initLabModule() {
             codeValue.textContent = dataType === 'text' ? `"${value}"` : value;
             
             if (dataType === 'number') {
-                variableBox.style.borderColor = '#28a745';
+                variableBox.style.borderColor = 'var(--success)';
                 boxType.textContent = '类型: 数字';
             } else {
-                variableBox.style.borderColor = '#17a2b8';
+                variableBox.style.borderColor = 'var(--info)';
                 boxType.textContent = '类型: 文字';
             }
         }
@@ -938,9 +1358,10 @@ function initJudgeModule() {
     const answeredDisplay = document.getElementById('judge-answered');
     const resetBtn = document.getElementById('judge-reset-btn');
 
-    let judgeAnswered = 0;
-    let judgeScore = 0;
-    let judgeQuestions = [...state.judgeQuestions]; // 副本，用于打乱
+    // 使用全局 state 追踪评分
+    if (typeof state.judgeAnswered === 'undefined') state.judgeAnswered = 0;
+    if (typeof state.judgeScore === 'undefined') state.judgeScore = 0;
+    let shuffledQuestions = [...state.judgeQuestions]; // 打乱的副本
 
     function shuffleArray(arr) {
         for (let i = arr.length - 1; i > 0; i--) {
@@ -951,14 +1372,14 @@ function initJudgeModule() {
     }
 
     // 初始打乱
-    shuffleArray(judgeQuestions);
+    shuffleArray(shuffledQuestions);
 
     function resetJudge() {
-        judgeAnswered = 0;
-        judgeScore = 0;
+        state.judgeAnswered = 0;
+        state.judgeScore = 0;
         scoreDisplay.textContent = '0';
         answeredDisplay.textContent = '0';
-        shuffleArray(judgeQuestions);
+        shuffleArray(shuffledQuestions);
         state.currentJudgeIndex = 0;
         feedback.textContent = '';
         validBtn.disabled = false;
@@ -968,37 +1389,44 @@ function initJudgeModule() {
     }
 
     function showCurrentQuestion() {
-        const current = judgeQuestions[state.currentJudgeIndex];
+        const current = shuffledQuestions[state.currentJudgeIndex];
         document.getElementById('current-variable').textContent = current.name;
         feedback.textContent = '';
     }
 
     function checkAnswer(isValid) {
-        if (validBtn.disabled) return; // 10题已答完
+        if (validBtn.disabled) return;
 
-        const current = judgeQuestions[state.currentJudgeIndex];
+        const current = shuffledQuestions[state.currentJudgeIndex];
+        const questionEl = document.getElementById('current-variable');
+        
         if (isValid === current.valid) {
             feedback.textContent = `✅ 回答正确！${current.reason}`;
-            feedback.style.color = '#28a745';
-            judgeScore++;
-            scoreDisplay.textContent = judgeScore;
+            feedback.className = 'feedback-correct';
+            state.judgeScore++;
+            scoreDisplay.textContent = state.judgeScore;
+            scoreDisplay.classList.add('bounce-in');
+            setTimeout(() => scoreDisplay.classList.remove('bounce-in'), 500);
 
-            // 达到8分立即标记完成
-            if (judgeScore >= 8) {
+            if (state.judgeScore >= 8) {
                 markModuleCompleted('judge');
             }
         } else {
             feedback.textContent = `❌ 回答错误！${current.reason}`;
-            feedback.style.color = '#dc3545';
+            feedback.className = 'feedback-wrong';
+            if (questionEl) {
+                questionEl.classList.add('shake');
+                setTimeout(() => questionEl.classList.remove('shake'), 500);
+            }
         }
 
         setTimeout(() => {
-            judgeAnswered++;
-            answeredDisplay.textContent = judgeAnswered;
+            state.judgeAnswered++;
+            answeredDisplay.textContent = state.judgeAnswered;
 
-            state.currentJudgeIndex = (state.currentJudgeIndex + 1) % judgeQuestions.length;
+            state.currentJudgeIndex = (state.currentJudgeIndex + 1) % shuffledQuestions.length;
 
-            if (judgeAnswered >= 10) {
+            if (state.judgeAnswered >= 10) {
                 // 10题答完，禁用按钮，显示重置
                 validBtn.disabled = true;
                 invalidBtn.disabled = true;
@@ -1021,16 +1449,72 @@ function initJudgeModule() {
 function initPracticeModule() {
     const levelButtons = document.querySelectorAll('.level-btn');
     const instructionText = document.getElementById('instruction-text');
-    const codeInput = document.getElementById('code-input');
+    const codeInputEl = document.getElementById('code-input');
     const runBtn = document.getElementById('run-code');
     const outputContent = document.getElementById('output-content');
     let practiceCompleted = false;
+
+    // CodeMirror 加载检测与降级
+    let editor; // 统一编辑器接口
+    const cmLoaded = typeof CodeMirror !== 'undefined';
+
+    if (cmLoaded) {
+        editor = CodeMirror(codeInputEl, {
+            value: '# 在这里编写代码\nname = \nprint(name)',
+            mode: 'python',
+            theme: 'monokai',
+            lineNumbers: true,
+            gutters: ['CodeMirror-linenumbers'],
+            indentUnit: 4,
+            smartIndent: true,
+            matchBrackets: true,
+            autoCloseBrackets: true,
+            extraKeys: {
+                'Ctrl-Enter': runCode,
+                'Cmd-Enter': runCode
+            }
+        });
+        // 强制刷新行号区域，同步 gutter 宽度
+        setTimeout(() => {
+            editor.refresh();
+            // 读取 CodeMirror 计算的 margin-left，同步设置 gutter 宽度
+            const sizer = codeInputEl.querySelector('.CodeMirror-sizer');
+            if (sizer) {
+                const marginLeft = parseInt(getComputedStyle(sizer).marginLeft) || 0;
+                const gutters = codeInputEl.querySelector('.CodeMirror-gutters');
+                const gutter = codeInputEl.querySelector('.CodeMirror-gutter');
+                if (gutters && marginLeft > 0) {
+                    gutters.style.width = marginLeft + 'px';
+                    gutters.style.minWidth = marginLeft + 'px';
+                }
+                if (gutter && marginLeft > 0) {
+                    gutter.style.width = marginLeft + 'px';
+                }
+            }
+        }, 150);
+    } else {
+        // 降级方案：使用原生 textarea
+        log.warn('CodeMirror 加载失败，已降级为原生编辑器');
+        codeInputEl.innerHTML = '<textarea id="code-input-fallback" style="width:100%;height:200px;font-family:monospace;font-size:0.95rem;padding:12px;border-radius:10px;border:2px solid var(--border-light);resize:vertical;"># 在这里编写代码\nname = \nprint(name)</textarea>';
+        const textarea = document.getElementById('code-input-fallback');
+        editor = {
+            getValue: () => textarea.value,
+            setValue: (v) => { textarea.value = v; }
+        };
+        // 为 textarea 绑快捷键
+        textarea.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                e.preventDefault();
+                runCode();
+            }
+        });
+    }
 
     const levels = {
         1: {
             instruction: '补全代码：给变量name赋值为"小明"并打印输出',
             template: '# 在这里编写代码\nname = \nprint(name)',
-            solution: ['name = "小明"', 'name = "小明"\n', 'name = \'小明\'', 'name = \'小明\'\n']
+            solution: ['name = "小明"', 'name = "小明"\n', "name = '小明'", "name = '小明'\n"]
         },
         2: {
             instruction: '定义两个变量：name赋值为"小红"，age赋值为12，然后打印它们',
@@ -1051,24 +1535,22 @@ function initPracticeModule() {
             levelButtons.forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             instructionText.textContent = levels[level].instruction;
-            codeInput.value = levels[level].template;
+            editor.setValue(levels[level].template);
             outputContent.textContent = '';
         });
     });
 
-    runBtn.addEventListener('click', () => {
-        const code = codeInput.value;
-        const level = state.currentLevel;
+    function runCode() {
+        const code = editor.getValue();
         
         try {
-            // 简单的代码执行模拟
             let output = '';
             const lines = code.split('\n');
             
             const variables = {};
             lines.forEach(line => {
                 line = line.trim();
-                if (line.startsWith('#')) return;
+                if (!line || line.startsWith('#')) return;
                 if (line.includes('=')) {
                     const parts = line.split('=');
                     const varName = parts[0].trim();
@@ -1084,26 +1566,31 @@ function initPracticeModule() {
                         variables[varName] = varValue;
                     }
                 } else if (line.startsWith('print(')) {
-                    const varName = line.slice(6, -1).trim();
-                    if (variables[varName] !== undefined) {
-                        output += variables[varName] + '\n';
-                    } else {
-                        output += varName + '\n';
+                    const match = line.match(/print\((.*)\)/);
+                    if (match) {
+                        const varName = match[1].trim();
+                        if (variables[varName] !== undefined) {
+                            output += variables[varName] + '\n';
+                        } else {
+                            output += varName + '\n';
+                        }
                     }
                 }
             });
             
             outputContent.textContent = output || '无输出';
-            outputContent.style.color = '#a6e22e';
+            outputContent.style.color = 'var(--monokai-output)';
             if (!practiceCompleted) {
                 practiceCompleted = true;
                 markModuleCompleted('practice');
             }
         } catch (e) {
             outputContent.textContent = '错误: ' + e.message;
-            outputContent.style.color = '#f92672';
+            outputContent.style.color = 'var(--monokai-error)';
         }
-    });
+    }
+
+    runBtn.addEventListener('click', runCode);
 }
 
 // 值追踪挑战模块
@@ -1133,10 +1620,10 @@ function initTraceModule() {
             
             const lineTexts = ['x = 5', 'y = x + 2', 'x = 10', 'z = x + y'];
             feedback.textContent = `执行: ${lineTexts[state.traceStep]}`;
-            feedback.style.color = '#28a745';
+            feedback.style.color = 'var(--success)';
         } else {
             feedback.textContent = '🎉 执行完成！最终结果: x=10, y=7, z=17';
-            feedback.style.color = '#667eea';
+            feedback.style.color = 'var(--primary-purple)';
             // 记录值追踪完成
             markModuleCompleted('trace');
         }
@@ -1159,57 +1646,119 @@ function initDebugModule() {
     const prevBtn = document.getElementById('prev-bug');
     const nextBtn = document.getElementById('next-bug');
     const medalCount = document.querySelector('#debug-medal span');
+    const bugProgress = document.getElementById('bug-progress');
+
+    // 追踪已修复的 bug（使用索引集合）
+    let fixedBugs = new Set();
+
+    function updateBugProgress() {
+        if (bugProgress) {
+            bugProgress.textContent = `${fixedBugs.size}/${state.bugs.length} 已修复`;
+        }
+    }
 
     function showBug(index) {
         const bug = state.bugs[index];
         bugCode.textContent = bug.code;
         
         // 清空现有选项
-        optionsContainer.innerHTML = '<p>请选择正确的修复方案：</p>';
+        optionsContainer.innerHTML = '';
+        
+        // 如果已修复，显示修复状态
+        if (fixedBugs.has(index)) {
+            feedback.textContent = '✅ 这个 bug 已修复！';
+            feedback.className = 'feedback-correct';
+            optionsContainer.innerHTML = '<p style="color: var(--success); font-weight:bold;">✅ 已修复，太棒了！</p>';
+            return;
+        }
+
+        feedback.textContent = '';
+        const hint = document.createElement('p');
+        hint.textContent = '请选择正确的修复方案：';
+        optionsContainer.appendChild(hint);
         
         // 添加新选项
         bug.options.forEach((option, idx) => {
             const btn = document.createElement('button');
             btn.textContent = option.text;
             btn.dataset.index = idx;
-            btn.addEventListener('click', () => checkBugAnswer(option.correct));
+            btn.addEventListener('click', () => checkBugAnswer(option.correct, index));
             optionsContainer.appendChild(btn);
         });
-        
-        feedback.textContent = '';
     }
 
-    function checkBugAnswer(isCorrect) {
+    function checkBugAnswer(isCorrect, bugIndex) {
+        if (fixedBugs.has(bugIndex)) return;
+
         if (isCorrect) {
             feedback.textContent = '✅ 修复成功！获得一枚勋章！';
-            feedback.style.color = '#28a745';
+            feedback.className = 'feedback-correct';
             state.debugMedals++;
             medalCount.textContent = state.debugMedals;
+            medalCount.parentElement.classList.add('bounce-in');
+            setTimeout(() => medalCount.parentElement.classList.remove('bounce-in'), 500);
             
-            // 所有bug修复完成
-            if (state.debugMedals >= state.bugs.length) {
+            fixedBugs.add(bugIndex);
+            updateBugProgress();
+            
+            if (fixedBugs.size >= state.bugs.length) {
                 markModuleCompleted('debug');
+                setTimeout(() => {
+                    feedback.textContent = '🎉 全部 bug 修复完毕！你是调试高手！';
+                }, 1000);
             }
         } else {
             feedback.textContent = '❌ 修复失败，再试试吧！';
-            feedback.style.color = '#dc3545';
+            feedback.className = 'feedback-wrong';
+            const bugDisplay = document.getElementById('bug-code');
+            if (bugDisplay) {
+                bugDisplay.classList.add('shake');
+                setTimeout(() => bugDisplay.classList.remove('shake'), 500);
+            }
         }
 
         setTimeout(() => {
-            nextBtn.click();
+            showBug(bugIndex);
         }, 1500);
     }
 
+    function findNextUnfixedBug(currentIndex, direction) {
+        const total = state.bugs.length;
+        // 如果全部修复，返回当前
+        if (fixedBugs.size >= total) return currentIndex;
+
+        let next = currentIndex;
+        for (let i = 0; i < total; i++) {
+            next = (next + direction + total) % total;
+            if (!fixedBugs.has(next)) return next;
+        }
+        return currentIndex;
+    }
+
     prevBtn.addEventListener('click', () => {
-        state.currentBugIndex = (state.currentBugIndex - 1 + state.bugs.length) % state.bugs.length;
+        state.currentBugIndex = findNextUnfixedBug(state.currentBugIndex, -1);
         showBug(state.currentBugIndex);
     });
 
     nextBtn.addEventListener('click', () => {
-        state.currentBugIndex = (state.currentBugIndex + 1) % state.bugs.length;
+        state.currentBugIndex = findNextUnfixedBug(state.currentBugIndex, 1);
         showBug(state.currentBugIndex);
     });
 
+    // 重置功能
+    const resetBtn = document.getElementById('debug-reset-btn');
+    if (resetBtn) {
+        resetBtn.addEventListener('click', () => {
+            fixedBugs.clear();
+            state.debugMedals = 0;
+            medalCount.textContent = '0';
+            updateBugProgress();
+            state.currentBugIndex = 0;
+            showBug(0);
+        });
+    }
+
+    updateBugProgress();
     showBug(state.currentBugIndex);
 }
 
@@ -1221,11 +1770,12 @@ function initExtendModule() {
     const generateSentenceBtn = document.getElementById('generate-sentence');
     const combineOutput = document.getElementById('combine-output');
 
-    let extendSwapDone = false;
-    let extendSentenceDone = false;
+    // 使用全局 state 追踪扩展模块进度
+    if (typeof state.extendSwapDone === 'undefined') state.extendSwapDone = false;
+    if (typeof state.extendSentenceDone === 'undefined') state.extendSentenceDone = false;
 
     function checkExtendComplete() {
-        if (extendSwapDone && extendSentenceDone) {
+        if (state.extendSwapDone && state.extendSentenceDone) {
             markModuleCompleted('extend');
         }
     }
@@ -1300,7 +1850,7 @@ function initExtendModule() {
                 swapStepBtn.disabled = true;
                 swapStepBtn.textContent = '✓ 交换完成';
                 updateSwapDisplay();
-                extendSwapDone = true;
+                state.extendSwapDone = true;
                 checkExtendComplete();
             }
         });
@@ -1329,7 +1879,7 @@ function initExtendModule() {
             
             const sentence = `大家好！我叫${name}，今年${age}岁，我喜欢${hobby}。`;
             combineOutput.textContent = sentence;
-            extendSentenceDone = true;
+            state.extendSentenceDone = true;
             checkExtendComplete();
         });
     }
@@ -1450,6 +2000,21 @@ function initTestModule() {
     function drawRadarChart(score) {
         const canvas = document.getElementById('radar-canvas');
         const ctx = canvas.getContext('2d');
+        // 从 CSS 变量读取主题颜色
+        const rootStyle = getComputedStyle(document.documentElement);
+        const radarAxis = rootStyle.getPropertyValue('--radar-axis').trim();
+        const primaryPurple = rootStyle.getPropertyValue('--primary-purple').trim();
+        const textPrimary = rootStyle.getPropertyValue('--text-primary').trim();
+        
+        // 将 hex 颜色转为 rgba
+        const hexToRgba = (hex, alpha) => {
+            const r = parseInt(hex.slice(1, 3), 16);
+            const g = parseInt(hex.slice(3, 5), 16);
+            const b = parseInt(hex.slice(5, 7), 16);
+            return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        };
+        const fillColor = hexToRgba(primaryPurple, 0.3);
+        
         const centerX = 150;
         const centerY = 150;
         const radius = 100;
@@ -1477,7 +2042,7 @@ function initTestModule() {
                 else ctx.lineTo(x, y);
             }
             ctx.closePath();
-            ctx.strokeStyle = '#ddd';
+            ctx.strokeStyle = radarAxis;
             ctx.lineWidth = 1;
             ctx.stroke();
         }
@@ -1490,11 +2055,11 @@ function initTestModule() {
             ctx.beginPath();
             ctx.moveTo(centerX, centerY);
             ctx.lineTo(x, y);
-            ctx.strokeStyle = '#ddd';
+            ctx.strokeStyle = radarAxis;
             ctx.stroke();
             
             // 绘制标签
-            ctx.fillStyle = '#333';
+            ctx.fillStyle = textPrimary;
             ctx.font = '12px Arial';
             ctx.textAlign = 'center';
             const labelX = centerX + (radius + 20) * Math.cos(angle);
@@ -1514,9 +2079,9 @@ function initTestModule() {
             else ctx.lineTo(x, y);
         }
         ctx.closePath();
-        ctx.fillStyle = 'rgba(102, 126, 234, 0.3)';
+        ctx.fillStyle = fillColor;
         ctx.fill();
-        ctx.strokeStyle = '#667eea';
+        ctx.strokeStyle = primaryPurple;
         ctx.lineWidth = 2;
         ctx.stroke();
 
@@ -1529,7 +2094,7 @@ function initTestModule() {
             const y = centerY + r * Math.sin(angle);
             ctx.beginPath();
             ctx.arc(x, y, 5, 0, Math.PI * 2);
-            ctx.fillStyle = '#667eea';
+            ctx.fillStyle = primaryPurple;
             ctx.fill();
         }
     }
@@ -1550,30 +2115,44 @@ function startTypewriterEffect() {
         const output = container.querySelector('.typewriter-output');
         const cursor = container.querySelector('.typewriter-cursor');
         
-        if (!output) return;
+        // 防止重复执行：如果已经有内容，跳过
+        if (!output || output.textContent.trim().length > 0) return;
         
-        const text = `name = "小明"
-age = 12
-score = 95.5`;
+        const text = `# 变量赋值演示
+name = "小明"
+age = 14
+favorite_color = "蓝色"
+
+# 打印变量值
+print("我叫", name)
+print("我今年", age, "岁")
+print("我喜欢", favorite_color)`;
         
         output.textContent = '';
+        if (cursor) cursor.style.display = 'inline-block';
         
-        if (cursor) {
-            output.appendChild(cursor);
-        }
-        
+        // 使用 Array.from 正确拆分 Unicode 字符
+        const chars = Array.from(text);
         let charIndex = 0;
         
         function typeCharacter() {
-            if (charIndex < text.length) {
-                const char = text[charIndex];
+            if (charIndex < chars.length) {
+                const char = chars[charIndex];
                 if (char === '\n') {
-                    output.insertBefore(document.createElement('br'), cursor);
+                    output.appendChild(document.createElement('br'));
+                } else if (char === '\r') {
+                    // 跳过 Windows 换行符中的 \r
                 } else {
-                    output.insertBefore(document.createTextNode(char), cursor);
+                    output.appendChild(document.createTextNode(char));
                 }
                 charIndex++;
-                setTimeout(typeCharacter, 100);
+                const delay = char === '\n' ? 200 : 60;
+                setTimeout(typeCharacter, delay);
+            } else {
+                // 打字完成后隐藏光标
+                if (cursor) {
+                    setTimeout(() => { cursor.style.display = 'none'; }, 2000);
+                }
             }
         }
         
@@ -1585,7 +2164,7 @@ score = 95.5`;
 function initScrollReveal() {
     const modules = document.querySelectorAll('.module');
     const featureCards = document.querySelectorAll('.feature-card');
-    const quickStartContent = document.querySelector('.quick-start-content');
+    const typewriterContainer = document.querySelector('.typewriter-container');
     let typewriterStarted = false;
     
     // 页面加载时显示第一个模块和可见的feature-card
@@ -1629,17 +2208,12 @@ function initScrollReveal() {
             }
         });
         
-        // 检测quick-start-content并触发打字机效果
-        if (quickStartContent && !quickStartContent.classList.contains('visible')) {
-            const rect = quickStartContent.getBoundingClientRect();
+        // 检测typewriter-container并触发打字机效果
+        if (typewriterContainer && !typewriterStarted) {
+            const rect = typewriterContainer.getBoundingClientRect();
             if (rect.top < windowHeight * 0.7) {
-                quickStartContent.classList.add('visible');
-                
-                // 打字机效果在显示后延迟启动
-                if (!typewriterStarted) {
-                    typewriterStarted = true;
-                    setTimeout(startTypewriterEffect, 300);
-                }
+                typewriterStarted = true;
+                setTimeout(startTypewriterEffect, 300);
             }
         }
     }
@@ -1647,6 +2221,293 @@ function initScrollReveal() {
     // 初始检测
     setTimeout(checkScroll, 100);
     
-    // 滚动事件监听
-    window.addEventListener('scroll', checkScroll);
+    // 滚动事件监听（节流处理，减少 CPU 消耗）
+    let scrollTimer = null;
+    window.addEventListener('scroll', () => {
+        if (scrollTimer) return;
+        scrollTimer = setTimeout(() => {
+            checkScroll();
+            // 回到顶部按钮显示/隐藏
+            const backToTopBtn = document.getElementById('backToTopBtn');
+            if (backToTopBtn) {
+                if (window.scrollY > 400) {
+                    backToTopBtn.classList.add('visible');
+                } else {
+                    backToTopBtn.classList.remove('visible');
+                }
+            }
+            scrollTimer = null;
+        }, 100);
+    });
+
+    // 使用 IntersectionObserver 处理 .reveal 系列元素的滚动入场
+    if ('IntersectionObserver' in window) {
+        const revealObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('revealed');
+                    revealObserver.unobserve(entry.target);
+                }
+            });
+        }, {
+            threshold: 0.15,
+            rootMargin: '0px 0px -40px 0px'
+        });
+
+        document.querySelectorAll('.reveal, .reveal-left, .reveal-right, .reveal-scale').forEach(el => {
+            revealObserver.observe(el);
+        });
+    } else {
+        // 降级：直接显示所有元素
+        document.querySelectorAll('.reveal, .reveal-left, .reveal-right, .reveal-scale').forEach(el => {
+            el.classList.add('revealed');
+        });
+    }
+}
+
+// 回到顶部
+function scrollToTop() {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ================================================================
+//   科技感增强动画 - Tech Enhancement Animations
+// ================================================================
+
+// ----- 粒子背景 Canvas 动画 -----
+function initParticleCanvas() {
+    const canvas = document.getElementById('particle-canvas');
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    let particles = [];
+    let animationId;
+    let mouseX = 0;
+    let mouseY = 0;
+
+    function resize() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    }
+    resize();
+    window.addEventListener('resize', () => {
+        resize();
+        initParticles();
+    });
+
+    // 鼠标跟踪
+    document.addEventListener('mousemove', (e) => {
+        mouseX = e.clientX;
+        mouseY = e.clientY;
+    });
+
+    class Particle {
+        constructor() {
+            this.reset();
+            this.y = Math.random() * canvas.height; // 初始随机分布
+        }
+        reset() {
+            this.x = Math.random() * canvas.width;
+            this.y = -10;
+            this.size = Math.random() * 2.5 + 0.5;
+            this.speedY = Math.random() * 0.6 + 0.2;
+            this.speedX = (Math.random() - 0.5) * 0.4;
+            this.opacity = Math.random() * 0.5 + 0.2;
+            this.hue = Math.random() > 0.5 ? 160 : 230; // 绿色或蓝紫色
+        }
+        update() {
+            this.y += this.speedY;
+            this.x += this.speedX;
+
+            // 鼠标吸引效果
+            const dx = mouseX - this.x;
+            const dy = mouseY - this.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < 150) {
+                const angle = Math.atan2(dy, dx);
+                const force = (150 - dist) / 150 * 0.03;
+                this.x -= Math.cos(angle) * force;
+                this.y -= Math.sin(angle) * force;
+            }
+
+            if (this.y > canvas.height + 10 || this.x < -10 || this.x > canvas.width + 10) {
+                this.reset();
+            }
+        }
+        draw() {
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+            ctx.fillStyle = `hsla(${this.hue}, 70%, 55%, ${this.opacity})`;
+            ctx.fill();
+        }
+    }
+
+    function initParticles() {
+        const count = Math.min(80, Math.floor((canvas.width * canvas.height) / 15000));
+        particles = Array.from({ length: count }, () => new Particle());
+    }
+
+    // 连线
+    function drawLines() {
+        for (let i = 0; i < particles.length; i++) {
+            for (let j = i + 1; j < particles.length; j++) {
+                const dx = particles[i].x - particles[j].x;
+                const dy = particles[i].y - particles[j].y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < 120) {
+                    ctx.beginPath();
+                    ctx.moveTo(particles[i].x, particles[i].y);
+                    ctx.lineTo(particles[j].x, particles[j].y);
+                    ctx.strokeStyle = `rgba(4, 170, 109, ${(120 - dist) / 120 * 0.12})`;
+                    ctx.lineWidth = 0.5;
+                    ctx.stroke();
+                }
+            }
+        }
+    }
+
+    function animate() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        particles.forEach(p => { p.update(); p.draw(); });
+        drawLines();
+        animationId = requestAnimationFrame(animate);
+    }
+
+    initParticles();
+    animate();
+
+    // 页面不可见时暂停，节省资源
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+            cancelAnimationFrame(animationId);
+        } else {
+            animate();
+        }
+    });
+}
+
+// ----- 数字雨效果（Hero 区域） -----
+function initDigitalRain() {
+    const hero = document.querySelector('.hero-section');
+    if (!hero) return;
+
+    const chars = '01アイウエオカキクケコサシスセソタチツテトナニヌネノ';
+    const container = document.createElement('div');
+    container.className = 'digital-rain';
+    container.style.cssText = 'position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:0;';
+    hero.insertBefore(container, hero.firstChild);
+
+    const columns = Math.floor(hero.offsetWidth / 30);
+    const drops = [];
+
+    for (let i = 0; i < columns; i++) {
+        const span = document.createElement('span');
+        span.className = 'digital-rain-char';
+        span.style.left = (i * 30 + Math.random() * 20) + 'px';
+        span.style.animationDuration = (Math.random() * 4 + 6) + 's';
+        span.style.animationDelay = (Math.random() * 5) + 's';
+        span.textContent = chars[Math.floor(Math.random() * chars.length)];
+        container.appendChild(span);
+        drops.push(span);
+    }
+
+    // 定期更新字符
+    setInterval(() => {
+        if (document.hidden) return;
+        drops.forEach(span => {
+            if (Math.random() > 0.7) {
+                span.textContent = chars[Math.floor(Math.random() * chars.length)];
+            }
+        });
+    }, 2000);
+}
+
+// ----- 数据流SVG动画 -----
+function initDataFlowLines() {
+    // 为特征卡片区域添加数据流线
+    const featuresSection = document.querySelector('.features-section');
+    if (!featuresSection) return;
+
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('class', 'data-flow-svg');
+    svg.setAttribute('width', '100%');
+    svg.setAttribute('height', '100%');
+    svg.style.cssText = 'position:absolute;top:0;left:0;pointer-events:none;z-index:0;';
+
+    // 创建几条流动线
+    const lines = [
+        { x1: '10%', y1: '20%', x2: '90%', y2: '80%' },
+        { x1: '90%', y1: '10%', x2: '10%', y2: '90%' },
+        { x1: '5%', y1: '50%', x2: '95%', y2: '50%' }
+    ];
+
+    lines.forEach((line, i) => {
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        path.setAttribute('x1', line.x1);
+        path.setAttribute('y1', line.y1);
+        path.setAttribute('x2', line.x2);
+        path.setAttribute('y2', line.y2);
+        path.setAttribute('stroke', 'rgba(4, 170, 109, 0.06)');
+        path.setAttribute('stroke-width', '1');
+        path.setAttribute('stroke-dasharray', '8,12');
+        path.style.animation = `dashFlow ${3 + i * 2}s linear infinite`;
+        svg.appendChild(path);
+    });
+
+    featuresSection.style.position = 'relative';
+    featuresSection.insertBefore(svg, featuresSection.firstChild);
+}
+
+// 虚线流动动画 keyframes（动态注入）
+(function injectDataFlowKeyframes() {
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes dashFlow {
+            0% { stroke-dashoffset: 40; }
+            100% { stroke-dashoffset: 0; }
+        }
+    `;
+    document.head.appendChild(style);
+})();
+
+// ----- 鼠标光晕跟随 -----
+function initMouseGlow() {
+    const glow = document.createElement('div');
+    glow.className = 'mouse-glow';
+    glow.style.cssText = `
+        position: fixed;
+        width: 400px;
+        height: 400px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(4,170,109,0.04) 0%, transparent 70%);
+        pointer-events: none;
+        z-index: 0;
+        transform: translate(-50%, -50%);
+        transition: opacity 0.3s ease;
+    `;
+    document.body.appendChild(glow);
+
+    let timeout;
+    document.addEventListener('mousemove', (e) => {
+        glow.style.left = e.clientX + 'px';
+        glow.style.top = e.clientY + 'px';
+        glow.style.opacity = '1';
+        clearTimeout(timeout);
+        timeout = setTimeout(() => { glow.style.opacity = '0'; }, 2000);
+    });
+}
+
+// ----- 初始化所有科技感动画 -----
+function initTechEnhancements() {
+    initParticleCanvas();
+    initDigitalRain();
+    initDataFlowLines();
+    initMouseGlow();
+}
+
+// 页面加载完成后初始化
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initTechEnhancements);
+} else {
+    initTechEnhancements();
 }
